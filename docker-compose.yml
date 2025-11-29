@@ -56,6 +56,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Persist workspaces (logs, artifacts, etc.)
       - backend_workspaces:/workspaces
+      - "C:\\Users\\njabulobc\\Desktop\\fuzz\\contracts:/contracts"
+
     depends_on:
       db:
         condition: service_healthy
@@ -89,6 +91,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - backend_workspaces:/workspaces
+      - "C:\\Users\\njabulobc\\Desktop\\fuzz\\contracts:/contracts"
+
     depends_on:
       db:
         condition: service_healthy

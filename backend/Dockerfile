@@ -6,6 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Install Docker CLI so this container can run "docker <commands>"
+RUN apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*
+
+
 # System deps for psycopg2 and reportlab fonts
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
