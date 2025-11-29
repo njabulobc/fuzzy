@@ -1,0 +1,29 @@
+# VCS
+.git
+.gitignore
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+*.sqlite3
+
+# Node
+**/node_modules
+**/dist
+**/.npm
+**/.cache
+
+# IDE & tooling
+.vscode
+.idea
+*.iml
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+# Env & secrets
+.env
+.env.*
+*.log

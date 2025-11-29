@@ -1,0 +1,114 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: fuzz_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: scan
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d scan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: fuzz_redis
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fuzz_api
+    environment:
+      # Database & Celery (match app.config.Settings defaults)
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/scan
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+
+      # Docker & workspaces
+      DOCKER_BINARY: docker
+      WORKSPACE_ROOT: /workspaces
+
+      # Optional: override tool images if needed
+      # SLITHER_IMAGE: trailofbits/slither:latest
+      # ECHIDNA_IMAGE: trailofbits/echidna:latest
+      # FOUNDRY_IMAGE: ghcr.io/foundry-rs/foundry:latest
+    volumes:
+      # Allow backend to orchestrate tool containers via Docker CLI
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persist workspaces (logs, artifacts, etc.)
+      - backend_workspaces:/workspaces
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fuzz_worker
+    command:
+      [
+        "celery",
+        "-A",
+        "app.services.celery_app.celery_app",
+        "worker",
+        "-Q",
+        "scans",
+        "-l",
+        "info"
+      ]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/scan
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      DOCKER_BINARY: docker
+      WORKSPACE_ROOT: /workspaces
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - backend_workspaces:/workspaces
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fuzz_frontend
+    environment:
+      # API base for browser → FastAPI
+      VITE_API_URL: http://localhost:8000/api
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_workspaces:
