@@ -18,6 +18,7 @@ Windows 11 (for local dev) and inside Linux containers.
 """
 
 from dataclasses import dataclass
+import shutil
 from pathlib import Path
 
 from app.config import get_settings
@@ -94,3 +95,56 @@ def create_workspace(project_id: str, scan_id: str) -> Workspace:
     )
     workspace.ensure_created()
     return workspace
+
+
+def _clear_directory(path: Path) -> None:
+    """Remove all children of ``path`` without deleting the directory itself."""
+
+    for child in path.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink(missing_ok=True)
+
+
+def materialize_project_sources(project_path: str | Path, workspace: Workspace) -> Path:
+    """
+    Copy the user-provided project sources into the workspace.
+
+    The dockerized scanners (Slither/Echidna/Foundry) run against paths that
+    exist inside the backend container and, by extension, inside the Docker
+    daemon. This helper ensures that even when users provide an absolute path
+    from their host machine, we work with a workspace-local copy that is
+    guaranteed to be mountable.
+
+    Returns the path to the workspace-local project root (typically
+    ``workspace.contracts_dir``) that tool runners should mount.
+    """
+
+    source = Path(project_path).expanduser()
+    workspace.ensure_created()
+    workspace.contracts_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        if source.resolve().is_relative_to(workspace.root.resolve()):
+            # Already inside the workspace; nothing to copy.
+            return source
+    except ValueError:
+        # Path is outside the workspace; proceed with copy below.
+        pass
+
+    if not source.exists():
+        raise FileNotFoundError(
+            f"Project path '{source}' does not exist inside the backend container."
+        )
+
+    _clear_directory(workspace.contracts_dir)
+
+    if source.is_dir():
+        shutil.copytree(source, workspace.contracts_dir, dirs_exist_ok=True)
+        return workspace.contracts_dir
+
+    # Single file: copy into contracts_dir and treat that directory as the root
+    destination = workspace.contracts_dir / source.name
+    shutil.copy2(source, destination)
+    return workspace.contracts_dir

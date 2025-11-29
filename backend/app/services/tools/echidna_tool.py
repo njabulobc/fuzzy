@@ -49,11 +49,11 @@ class EchidnaToolRunner:
         project = context.project
         scan = context.scan
         workspace: Workspace = context.workspace
+        project_root = context.project_root
 
         log_dir = workspace.logs_dir / self.name
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        project_path = Path(project.path).resolve()
         target_rel = scan.target
         container_target = f"/project/{target_rel}"
 
@@ -62,7 +62,7 @@ class EchidnaToolRunner:
             "run",
             "--rm",
             "-v",
-            f"{project_path}:/project",
+            f"{project_root}:/project",
             settings.echidna_image,
             "echidna-test",
             container_target,

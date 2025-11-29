@@ -20,13 +20,18 @@ Foundry) live under ``app.services.tools`` and implement ToolRunnerProtocol.
 from dataclasses import dataclass
 from datetime import datetime
 import json
+from pathlib import Path
 from typing import Dict, Protocol
 
 from sqlalchemy.orm import Session, selectinload
 
 from app import models
 from app.db.session import SessionLocal
-from app.services.scanner.workspace import Workspace, create_workspace
+from app.services.scanner.workspace import (
+    Workspace,
+    create_workspace,
+    materialize_project_sources,
+)
 
 
 @dataclass
@@ -42,6 +47,7 @@ class ScanContext:
     project: models.Project
     scan: models.Scan
     workspace: Workspace
+    project_root: Path
 
 
 class ToolRunnerProtocol(Protocol):
@@ -87,7 +93,13 @@ def _load_scan_context(db: Session, scan_id: str) -> ScanContext:
 
     project = scan.project
     workspace = create_workspace(project_id=project.id, scan_id=scan.id)
-    return ScanContext(project=project, scan=scan, workspace=workspace)
+    project_root = materialize_project_sources(project.path, workspace)
+    return ScanContext(
+        project=project,
+        scan=scan,
+        workspace=workspace,
+        project_root=project_root,
+    )
 
 
 def _ensure_tool_executions(db: Session, scan: models.Scan) -> None:
@@ -162,7 +174,29 @@ def run_scan_sync(
     db: Session | None = None
     try:
         db = SessionLocal()
-        context = _load_scan_context(db, scan_id)
+        try:
+            context = _load_scan_context(db, scan_id)
+        except Exception as exc:  # noqa: BLE001
+            scan = (
+                db.query(models.Scan)
+                .filter(models.Scan.id == scan_id)
+                .first()
+            )
+            if scan:
+                scan.status = models.ScanStatus.FAILED
+                scan.finished_at = datetime.utcnow()
+                scan.logs = json.dumps(
+                    [
+                        {
+                            "tool": "runner",
+                            "status": models.ToolExecutionStatus.FAILED.value,
+                            "error": str(exc),
+                        }
+                    ]
+                )
+                db.commit()
+            return
+
         scan = context.scan
 
         # Mark scan as running (only first time)
