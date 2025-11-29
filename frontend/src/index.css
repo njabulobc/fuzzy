@@ -1,57 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #0f172a;
-  background-color: #0f172a;
+  @apply bg-slate-950 text-slate-50 font-sans;
 }
 
-body.fuzz-body {
-  margin: 0;
-  min-height: 100vh;
-  background: radial-gradient(circle at top left, #1e293b, #020617);
-  color: #0f172a;
+body {
+  @apply min-h-screen bg-slate-950 text-slate-50 antialiased;
+}
+
+#root {
+  @apply min-h-screen;
 }
 
 .fuzz-app {
-  min-height: 100vh;
+  @apply min-h-screen;
 }
 
 .fuzz-card {
-  border-radius: 0.75rem;
-  background-color: #ffffff;
-  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.18);
+  @apply rounded-2xl border border-slate-100/80 bg-white shadow-2xl shadow-slate-900/10;
 }
 
 .fuzz-input {
-  border-radius: 0.5rem;
-  border: 1px solid #cbd5f5;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-}
-
-.fuzz-input:focus {
-  outline: 2px solid #2563eb;
-  outline-offset: 1px;
+  @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100;
 }
 
 .fuzz-button-primary {
-  border-radius: 0.5rem;
-  border: none;
-  padding: 0.5rem 0.9rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  color: #f9fafb;
-  cursor: pointer;
-}
-
-.fuzz-button-primary:disabled {
-  opacity: 0.6;
-  cursor: default;
+  @apply inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-sky-500 to-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 transition hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60;
 }
 
 .fuzz-badge {
-  border-radius: 999px;
-  padding: 0.15rem 0.56rem;
-  font-size: 0.7rem;
-  font-weight: 600;
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide;
 }

@@ -114,11 +114,11 @@ class FoundryToolRunner:
         project = context.project
         scan = context.scan
         workspace: Workspace = context.workspace
+        project_root = context.project_root
 
         log_dir = workspace.logs_dir / self.name
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        project_path = Path(project.path).resolve()
         target_rel = scan.target
         target_path = Path(target_rel)
 
@@ -130,7 +130,7 @@ class FoundryToolRunner:
             "run",
             "--rm",
             "-v",
-            f"{project_path}:{container_root}",
+            f"{project_root}:{container_root}",
             settings.foundry_image,
             "forge",
             "test",
