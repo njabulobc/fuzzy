@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 from app import models, schemas
 from app.db.session import get_db
 from app.services.scanner import execute_scan
+from app.services.statsig_client import log_backend_event
 
 router = APIRouter(prefix="/scans", tags=["scans"])
 
@@ -54,6 +55,14 @@ def _create_scan(
     db.add(scan)
     db.commit()
     db.refresh(scan)
+    log_backend_event(
+        "scan_created",
+        metadata={
+            "scan_id": scan.id,
+            "project_id": scan.project_id,
+            "tools": ",".join(scan.tools or []) if scan.tools else None,
+        },
+    )
 
     _dispatch_scan(db, scan)
     return scan

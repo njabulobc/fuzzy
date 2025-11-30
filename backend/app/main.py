@@ -16,8 +16,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
 from app.config import get_settings
 from app.db.session import Base, engine
+from app.services.statsig_client import get_statsig_client, log_backend_event, shutdown_statsig
 
 settings = get_settings()
+statsig_client = get_statsig_client()
 
 app = FastAPI(
     title=settings.app_name,
@@ -53,6 +55,14 @@ def on_startup() -> None:
     instead of `create_all`, but this keeps the system runnable out of the box.
     """
     Base.metadata.create_all(bind=engine)
+    log_backend_event(
+        "api_startup",
+        metadata={
+            "app_name": settings.app_name,
+            "environment": settings.environment,
+            "statsig_enabled": statsig_client.enabled,
+        },
+    )
 
 
 # ---- Healthcheck ----
@@ -61,3 +71,12 @@ def on_startup() -> None:
 @app.get("/health", tags=["health"])
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    log_backend_event(
+        "api_shutdown",
+        metadata={"app_name": settings.app_name, "environment": settings.environment},
+    )
+    shutdown_statsig()

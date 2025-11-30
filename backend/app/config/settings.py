@@ -58,6 +58,9 @@ class Settings(BaseSettings):
   foundry_timeout_seconds: int = 900
   foundry_max_runtime_seconds: int | None = 1200
 
+  # Observability
+  statsig_server_secret: str | None = None
+
   model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createProject,
   getScan,
@@ -20,6 +20,7 @@ import type {
 import { FindingsTable } from './components/FindingsTable'
 import { ToolExecutionsTable } from './components/ToolExecutionsTable'
 import { Toast, ToastStack } from './components/Toast'
+import { initMonitoring, isMonitoringEnabled, logEvent, shutdownMonitoring } from './statsigClient'
 
 type ProjectForm = {
   name: string
@@ -48,7 +49,8 @@ const DEFAULT_SCAN_FORM: ScanForm = {
 const STORAGE_KEYS = {
   projectForm: 'fuzz_projectForm',
   scanForm: 'fuzz_scanForm',
-  selectedScanId: 'fuzz_selectedScanId'
+  selectedScanId: 'fuzz_selectedScanId',
+  statsigUserId: 'fuzz_statsigUserId'
 }
 
 const statusColor: Record<ScanStatus, string> = {
@@ -79,6 +81,18 @@ const App: React.FC = () => {
   const [creatingProject, setCreatingProject] = useState(false)
   const [startingScan, setStartingScan] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [statsigUserId] = useState<string>(() => {
+    const existing = window.localStorage.getItem(STORAGE_KEYS.statsigUserId)
+    if (existing) return existing
+
+    const generated =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2)
+    window.localStorage.setItem(STORAGE_KEYS.statsigUserId, generated)
+    return generated
+  })
+  const lastScanStatuses = useRef<Record<string, ScanStatus>>({})
 
   // ---------- Toast helpers ----------
 
@@ -105,6 +119,25 @@ const App: React.FC = () => {
       window.localStorage.setItem(STORAGE_KEYS.selectedScanId, selectedScanId)
     }
   }, [selectedScanId])
+
+  useEffect(() => {
+    if (!isMonitoringEnabled()) return
+
+    let cancelled = false
+    void (async () => {
+      await initMonitoring({ userID: statsigUserId })
+      if (!cancelled) {
+        await logEvent('frontend_session_started', null, {
+          api_base: API_BASE_URL
+        })
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      shutdownMonitoring()
+    }
+  }, [statsigUserId])
 
   // ---------- Initial data ----------
 
@@ -189,6 +222,11 @@ const App: React.FC = () => {
     }
   }, [selectedScanId, pushToast])
 
+  useEffect(() => {
+    if (!selectedScanId) return
+    void logEvent('scan_selected', null, { scan_id: selectedScanId })
+  }, [selectedScanId])
+
   // ---------- Derived ----------
 
   const selectedScan = useMemo(
@@ -202,6 +240,28 @@ const App: React.FC = () => {
   )
 
   const selectedToolNames = useMemo(() => new Set(scanForm.tools), [scanForm.tools])
+
+  useEffect(() => {
+    if (!scanDetail) return
+    const previous = lastScanStatuses.current[scanDetail.id]
+    if (previous === scanDetail.status) return
+
+    lastScanStatuses.current[scanDetail.id] = scanDetail.status
+    const metadata = {
+      scan_id: scanDetail.id,
+      project_id: scanDetail.project_id,
+      status: scanDetail.status,
+      tools: scanDetail.tools.join(', ')
+    }
+
+    if (scanDetail.status === 'RUNNING') {
+      void logEvent('scan_running', null, metadata)
+    }
+
+    if (scanDetail.status === 'SUCCESS' || scanDetail.status === 'FAILED') {
+      void logEvent('scan_completed', scanDetail.status, metadata)
+    }
+  }, [scanDetail])
 
   // ---------- Event handlers ----------
 
@@ -219,12 +279,20 @@ const App: React.FC = () => {
     setCreatingProject(true)
     try {
       const created = await createProject(payload)
+      void logEvent('project_created_frontend', null, {
+        project_id: created.id,
+        name: created.name
+      })
       pushToast('success', `Project '${created.name}' created`)
       setProjectForm(DEFAULT_PROJECT_FORM)
       await refreshProjects()
     } catch (err: any) {
       console.error(err)
       const detail = err?.response?.data?.detail
+      void logEvent('project_create_failed', null, {
+        error: typeof detail === 'string' ? detail : 'unknown',
+        name: payload.name
+      })
       pushToast('error', typeof detail === 'string' ? detail : 'Failed to create project')
     } finally {
       setCreatingProject(false)
@@ -247,11 +315,20 @@ const App: React.FC = () => {
     setStartingScan(true)
     try {
       const scan = await startScan(payload)
+      void logEvent('scan_started', null, {
+        scan_id: scan.id,
+        project_id: payload.project_id,
+        tools: payload.tools.join(', ')
+      })
       pushToast('success', 'Scan started')
       await refreshScans()
       setSelectedScanId(scan.id)
     } catch (err) {
       console.error(err)
+      void logEvent('scan_start_failed', null, {
+        project_id: payload.project_id,
+        tools: payload.tools.join(', ')
+      })
       pushToast('error', 'Failed to start scan')
     } finally {
       setStartingScan(false)
