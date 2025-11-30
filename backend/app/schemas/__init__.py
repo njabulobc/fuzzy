@@ -69,6 +69,39 @@ class ScanRequest(BaseModel):
     chain: str | None = None
     meta: Optional[dict] = None
 
+    @staticmethod
+    def _normalize_target(raw_target: str | None) -> str:
+        """Sanitize and normalize a scan target to a relative path.
+
+        The API expects targets to be paths relative to the project root. Users may
+        accidentally paste absolute paths (e.g., "/project/contracts") or prefix
+        values with shell-style comments ("# /project/contracts"), which causes
+        downstream tools like Slither to fail with "Unrecognised file/dir path".
+
+        This helper trims whitespace, strips leading comment characters, and removes
+        common absolute prefixes so the resulting value is a clean relative path.
+        """
+
+        target = (raw_target or "").strip()
+
+        # Strip accidental leading comment markers (e.g., "# /project/contracts")
+        if target.startswith("#"):
+            target = target.lstrip("#").strip()
+
+        # Convert absolute paths to project-relative ones
+        if target.startswith("/project/"):
+            target = target[len("/project/") :]
+        elif target.startswith("/"):
+            target = target.lstrip("/")
+
+        # Normalize redundant relative prefixes
+        target = target.lstrip("./")
+
+        if not target:
+            raise ValueError("Provide a target or log_file to scan")
+
+        return target
+
     @model_validator(mode="after")
     def ensure_project_and_target(self) -> "ScanRequest":
         # Ensure we know which project to associate the scan with
@@ -85,6 +118,8 @@ class ScanRequest(BaseModel):
 
         if not self.target:
             raise ValueError("Provide a target or log_file to scan")
+
+        self.target = self._normalize_target(self.target)
 
         # If we need to create a project and project_path is missing, infer from log_file
         if not self.project_id and not self.project_path:
@@ -113,6 +148,11 @@ class QuickScanRequest(BaseModel):
     tools: List[str] = Field(
         default_factory=lambda: ["slither", "echidna", "foundry"]
     )
+
+    @model_validator(mode="after")
+    def normalize(self) -> "QuickScanRequest":
+        self.target = ScanRequest._normalize_target(self.target)
+        return self
 
 
 class ScanRead(BaseModel):
