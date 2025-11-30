@@ -201,6 +201,28 @@ const App: React.FC = () => {
     [projects, scanDetail]
   )
 
+  const failureSummary = useMemo(() => {
+    if (!scanDetail) return null
+
+    const failedExecutions = scanDetail.tool_executions.filter((e) => e.status === 'FAILED')
+    if (!failedExecutions.length) return null
+
+    const reasonCounts = failedExecutions.reduce<Record<string, number>>((acc, exec) => {
+      const reason = exec.failure_reason || exec.error || 'Unknown failure'
+      acc[reason] = (acc[reason] ?? 0) + 1
+      return acc
+    }, {})
+
+    const [topReason, count] = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1])[0]
+    const allFailed = failedExecutions.length === scanDetail.tool_executions.length
+
+    return {
+      summary: allFailed
+        ? `All tools failed; most common reason: ${topReason} (${count}x)`
+        : `Some tools failed; most common reason: ${topReason} (${count}x)`
+    }
+  }, [scanDetail])
+
   const selectedToolNames = useMemo(() => new Set(scanForm.tools), [scanForm.tools])
 
   // ---------- Event handlers ----------
@@ -534,6 +556,16 @@ const App: React.FC = () => {
                     <div>Tools: {scanDetail.tools.join(', ')}</div>
                   </div>
                 </div>
+
+                {failureSummary && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <div className="flex items-center gap-2 font-semibold">
+                      <span className="text-lg">⚠️</span>
+                      <span>Failure summary</span>
+                    </div>
+                    <p className="mt-1 leading-relaxed text-amber-800">{failureSummary.summary}</p>
+                  </div>
+                )}
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
