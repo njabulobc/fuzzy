@@ -12,3 +12,4 @@ redis>=5.0.0,<6.0.0
 
 reportlab>=4.0.0,<5.0.0
 python-dotenv>=1.0.0,<2.0.0
+statsig>=0.29.0

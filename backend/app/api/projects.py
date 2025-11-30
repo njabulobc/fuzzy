@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.db.session import get_db
+from app.services.statsig_client import log_backend_event
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -35,6 +36,10 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    log_backend_event(
+        "project_created",
+        metadata={"project_id": project.id, "name": project.name},
+    )
     return project
 
 

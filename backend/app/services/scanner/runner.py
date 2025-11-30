@@ -32,6 +32,7 @@ from app.services.scanner.workspace import (
     create_workspace,
     materialize_project_sources,
 )
+from app.services.statsig_client import log_backend_event
 
 
 @dataclass
@@ -279,6 +280,15 @@ def run_scan_sync(
         scan.logs = _build_logs_snapshot(db, scan.id)
         db.commit()
         db.refresh(scan)
+        log_backend_event(
+            "scan_completed",
+            metadata={
+                "scan_id": scan.id,
+                "project_id": scan.project_id,
+                "status": scan.status.value if scan.status else None,
+                "tools": ",".join(scan.tools or []) if scan.tools else None,
+            },
+        )
 
     finally:
         if db is not None:
