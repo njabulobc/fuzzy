@@ -47,6 +47,8 @@ class Settings(BaseSettings):
   # On-disk workspace root (inside the backend container)
   workspace_root: str = "/workspaces"
 
+  projects_host_root: str | None = None
+
   # Per-tool runtime defaults (seconds)
   slither_timeout_seconds: int = 600
   slither_max_runtime_seconds: int | None = 900
