@@ -1,0 +1,7 @@
+FROM trailofbits/echidna:latest
+
+# Install a specific solc version once, at build time
+RUN solc-select install 0.8.20 && solc-select use 0.8.20
+
+# Optional: show what we ended up with
+RUN solc --version

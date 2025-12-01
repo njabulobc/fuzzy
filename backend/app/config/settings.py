@@ -41,7 +41,7 @@ class Settings(BaseSettings):
   # Docker tooling
   docker_binary: str = "docker"
   slither_image: str = "trailofbits/slither:latest"
-  echidna_image: str = "trailofbits/echidna:latest"
+  echidna_image: str = "my-echidna:0.8.20"
   foundry_image: str = "ghcr.io/foundry-rs/foundry:latest"
 
   # On-disk workspace root (inside the backend container)
