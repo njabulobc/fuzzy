@@ -1,22 +1,43 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.0;
 
-contract Token {
-    mapping(address => uint256) public balances;
-    uint256 public totalSupply;
+contract Ownable {
+    address public owner = msg.sender;
 
-    constructor() {
-        uint256 amount = 1_000_000;
-        balances[msg.sender] = amount;
-        totalSupply = amount;
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Ownable: Caller is not the owner.");
+        _;
+    }
+}
+
+contract Pausable is Ownable {
+    bool private _paused;
+
+    function paused() public view returns (bool) {
+        return _paused;
     }
 
-    function transfer(address to, uint256 amount) external returns (bool) {
-        if (balances[msg.sender] < amount) {
-            return false;
+    function pause() public onlyOwner {
+        _paused = true;
+    }
+
+    function resume() public onlyOwner {
+        _paused = false;
+    }
+
+    modifier whenNotPaused() {
+        require(!_paused, "Pausable: Contract is paused.");
+        _;
+    }
+}
+
+contract Token is Ownable, Pausable {
+    mapping(address => uint256) public balances;
+
+    function transfer(address to, uint256 value) public whenNotPaused {
+        // unchecked to save gas
+        unchecked {
+            balances[msg.sender] -= value;
+            balances[to] += value;
         }
-        balances[msg.sender] -= amount;
-        balances[to] += amount;
-        return true;
     }
 }

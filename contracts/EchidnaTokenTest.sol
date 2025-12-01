@@ -1,23 +1,20 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.0;
 
-import "./Token.sol";
+import "./token.sol";
 
-// Echidna will deploy this contract and fuzz it.
-contract EchidnaTokenTest {
-    Token public token;
+/// @dev Run the template with
+///      ```
+///      solc-select use 0.8.0
+///      echidna program-analysis/echidna/exercises/exercise1/template.sol
+///      ```
+contract TestToken is Token {
+    address echidna = tx.origin;
 
     constructor() {
-        token = new Token();
+        balances[echidna] = 10_000;
     }
 
-    // Property 1: totalSupply never changes from 1_000_000
-    function echidna_total_supply_constant() public view returns (bool) {
-        return token.totalSupply() == 1_000_000;
-    }
-
-    // Property 2: this contract's balance is never greater than totalSupply
-    function echidna_balance_not_more_than_supply() public view returns (bool) {
-        return token.balances(address(this)) <= token.totalSupply();
+    function echidna_test_balance() public view returns (bool) {
+        return balances[echidna] <= 10_000;
     }
 }
