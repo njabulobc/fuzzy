@@ -1,0 +1,11 @@
+services:
+  api:
+    volumes:
+      # Mount backend source into /app so the `app` package is at /app/app
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    volumes:
+      # Same for the worker – it must see the same /app tree as the api
+      - ./backend:/app

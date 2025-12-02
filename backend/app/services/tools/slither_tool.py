@@ -180,6 +180,19 @@ class SlitherToolRunner:
 
         # --- 2. Build the Docker command -------------------------------------
         # NOTE: The left side of `-v` *must* be a HOST path, not a container path.
+        
+        # Run slither inside the container, write JSON to a temp file, then cat it.
+        # This ensures stdout is pure JSON (if any) so our Option A + parser work.
+        shell_cmd = (
+            "slither "
+            f"{container_target} "
+            "--json /tmp/slither.json "
+            "> /tmp/slither.log 2>&1; "  # send human logs to a file
+            "rc=$?; "
+            "if [ -f /tmp/slither.json ]; then cat /tmp/slither.json; fi; "
+            "exit $rc"
+        )
+        
         cmd: List[str] = [
             getattr(settings, "docker_binary", "docker"),
             "run",
@@ -187,10 +200,9 @@ class SlitherToolRunner:
             "-v",
             f"{host_project_root}:{container_root}",
             settings.slither_image,
-            "slither",
-            container_target,
-            "--json",
-            "-",  # emit JSON to stdout so we can capture it directly
+            "sh",
+            "-lc",
+            shell_cmd,
         ]
 
         result: ToolResult = run_command(
@@ -201,6 +213,21 @@ class SlitherToolRunner:
             log_dir=log_dir,
             max_runtime=self.config.max_runtime_seconds,
         )
+
+        # --- 2b. Option A: non-zero but JSON output => treat as success -------
+        # Slither sometimes exits with a non-zero code when it finds issues,
+        # but still produces valid JSON. In that case we *do* want to parse
+        # and store findings, not treat it as a hard failure.
+        if not result.success and result.output:
+            try:
+                json.loads(result.output)
+            except json.JSONDecodeError:
+                # Real failure: output isn't valid JSON, leave success=False
+                pass
+            else:
+                # Analysis completed and returned JSON; keep non-zero exit_code
+                # for debugging, but mark the run as logically successful.
+                result.success = True
 
         # --- 3. Populate execution metadata ----------------------------------
         execution.command = result.command
@@ -223,31 +250,72 @@ class SlitherToolRunner:
         if result.success and result.output:
             try:
                 data = json.loads(result.output)
-                for issue in data.get("results", {}).get("detectors", []):
-                    elements = issue.get("elements", [{}])
-                    src_map = elements[0].get("source_mapping", {}) if elements else {}
-                    filename = src_map.get("filename_relative") or src_map.get("filename_absolute")
-                    lines = src_map.get("lines") or ["?"]
-
-                    findings.append(
-                        NormalizedFinding(
-                            tool="slither",
-                            title=issue.get("check", "slither finding"),
-                            description=issue.get("description", ""),
-                            severity=str(issue.get("impact", "INFO")).upper(),
-                            category=issue.get("check"),
-                            file_path=filename,
-                            line_number=str(lines[0]) if lines else None,
-                            function=elements[0].get("type") if elements else None,
-                            raw=issue,
-                            tool_version=execution.tool_version,
-                        )
-                    )
             except json.JSONDecodeError as exc:
-                # Mark parsing failure but keep stdout/stderr/artifacts for debugging.
+                # JSON is completely broken – record parsing_error but don't crash the runner.
                 result.parsing_error = str(exc)
                 execution.parsing_error = str(exc)
                 execution.failure_reason = classify_tool_failure(self.name, result)
+            else:
+                try:
+                    # Slither JSON can be either:
+                    # - a dict with results.detectors (typical), or
+                    # - a top-level list of detector-like issue objects.
+                    if isinstance(data, dict):
+                        detectors = data.get("results", {}).get("detectors", [])
+                    elif isinstance(data, list):
+                        detectors = data
+                    else:
+                        detectors = []
+
+                    for issue in detectors:
+                        if not isinstance(issue, dict):
+                            continue
+
+                        elements = issue.get("elements") or [{}]
+                        if not isinstance(elements, list):
+                            elements = [elements]
+
+                        primary = elements[0] if elements else {}
+                        if not isinstance(primary, dict):
+                            primary = {}
+
+                        src_map = primary.get("source_mapping") or {}
+                        if not isinstance(src_map, dict):
+                            src_map = {}
+
+                        filename = (
+                            src_map.get("filename_relative")
+                            or src_map.get("filename_absolute")
+                        )
+
+                        lines = src_map.get("lines") or []
+                        line_number: str | None = None
+                        if isinstance(lines, list) and lines:
+                            line_number = str(lines[0])
+                        elif isinstance(lines, (int, str)):
+                            line_number = str(lines)
+
+                        findings.append(
+                            NormalizedFinding(
+                                tool="slither",
+                                title=issue.get("check", "slither finding"),
+                                description=issue.get("description", ""),
+                                severity=str(issue.get("impact", "INFO")).upper(),
+                                category=issue.get("check"),
+                                file_path=filename,
+                                line_number=line_number,
+                                function=primary.get("type"),
+                                raw=issue,
+                                tool_version=execution.tool_version,
+                            )
+                        )
+                except Exception as exc:
+                    # Any unexpected structure issue should NOT crash the whole tool run.
+                    result.parsing_error = str(exc)
+                    execution.parsing_error = str(exc)
+                    # Note: result.success stays True, so execution.status will be SUCCEEDED
+                    # even if we failed to extract findings. That's fine; logs + parsing_error
+                    # will still be available for debugging.
 
         # --- 5. Persist findings & final status ------------------------------
         execution.findings_count = store_normalized_findings(db, scan, findings)
