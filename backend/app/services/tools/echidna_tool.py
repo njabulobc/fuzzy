@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.scanner import workspace
+
 """backend/app/services/tools/echidna_tool.py
 
 Adapter for running **Echidna** via Docker and normalizing its findings.
@@ -158,10 +160,11 @@ class EchidnaToolRunner:
         log_dir = workspace.logs_dir / self.name
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        # --- 1. Resolve paths -------------------------------------------------
+               # --- 1. Resolve paths -------------------------------------------------
         container_root = "/project"
 
         # Host path used for `docker run -v HOST_PATH:/project`.
+        # This MUST be a host path, not a container path.
         host_project_root = _resolve_host_project_root(
             project=project,
             project_root=project_root,
@@ -169,10 +172,16 @@ class EchidnaToolRunner:
 
         # Path to pass to `echidna-test` inside the container.
         container_target = _resolve_container_target(
-            scan_target=getattr(scan, "target", None),
+            scan_target=context.scan.target,
             project_root=project_root,
             container_root=container_root,
         )
+        container_project_root = Path("/project")
+
+
+        # Path to pass to `echidna-test` inside the container.
+        container_target = container_project_root / Path(context.scan.target).name
+
 
         # --- 2. Build the Docker command -------------------------------------
         # NOTE: The left side of `-v` *must* be a HOST path, not a container path.
@@ -185,9 +194,13 @@ class EchidnaToolRunner:
             settings.echidna_image,
             "echidna-test",
             container_target,
-            "--format",
-            "json",
+            "--format", "json",
+            "--contract", "EchidnaTokenTest",
+            "--test-mode", "property",
         ]
+
+
+
 
         # Optional fuzz duration limit (seconds)
         if self.config.fuzz_duration_seconds:

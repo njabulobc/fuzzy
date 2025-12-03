@@ -55,6 +55,7 @@ services:
       # Persist workspaces (logs, artifacts, etc.)
       - backend_workspaces:/workspaces
       - "C:/Users/njabulobc/Downloads/regina/fuzzy/contracts:/contracts"
+      - "C:\\Users\\njabulobc\\Documents\\fuzz\\contracts:/project"
 
     depends_on:
       db:
@@ -91,6 +92,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - backend_workspaces:/workspaces
       - "C:/Users/njabulobc/Downloads/regina/fuzzy/contracts:/contracts"
+      - "C:\\Users\\njabulobc\\Documents\\fuzz\\contracts:/project"
+
 
     depends_on:
       db:
